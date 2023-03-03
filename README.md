@@ -7,6 +7,8 @@ containing only one branch of class `T`. Since `T` can be arbitrarily complex
 and may contain sub-classes, any event-like structure can be streamed into a
 ROOT file in this way.
 
+If needed, additional single instances of classes can be appended to the file.
+
 Check the `test_rootfile.cpp` file for more details.
 
 
