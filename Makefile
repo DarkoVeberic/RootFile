@@ -51,7 +51,8 @@ endef
 	@sed -e 's|.*:|$@:|' <$@.d >$@.P
 	@sed -e 's/.*://' -e 's/\\$$//' <$@.d | fmt -1 | sed -e 's/^ *//' -e 's/$$/:/' >>$@.P
 	@rm -f $@.d
-	$(ROOTSYS)/bin/rootcint -f $@ -c -p -I. $*.h $*.LinkDef.h
+	#$(ROOTSYS)/bin/rootcling -cint -f $@ -c -p -I. $*.h $*.LinkDef.h
+	$(ROOTSYS)/bin/rootcint -v4 -f $@ -c -p -I. $*.h $*.LinkDef.h
 	@cp $(dir $*)*.Dict_rdict.pcm . || true
 
 .PHONY: all

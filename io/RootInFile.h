@@ -1,4 +1,4 @@
-// $Id: RootInFile.h 1576 2018-12-17 15:26:42Z darko $
+// $Id: RootInFile.h 1859 2021-06-11 09:27:13Z darko $
 #ifndef _io_RootInFile_h_
 #define _io_RootInFile_h_
 
@@ -11,9 +11,11 @@
 #include <TChain.h>
 #include <TChainElement.h>
 #include <TFile.h>
+#include <TError.h>
 #include <string>
 #include <limits>
 #include <stdexcept>
+#include <iostream>
 
 
 #ifdef IO_ROOTFILE_DEBUG
@@ -44,10 +46,14 @@ namespace io {
       typedef int difference_type;
       typedef std::input_iterator_tag iterator_category;
 
+      //Iterator(const Iterator& b) : fFile(b.fFile), fIndex(b.fIndex) { }
       Iterator(RootInFile& file, const ULong64_t index) : fFile(file), fIndex(index) { }
       Iterator& operator++() { ++fIndex; return *this; } // prefix ++it
+      Iterator& operator+=(const int n) { fIndex += n; return *this; }
       Entry& operator*() { return fFile[fIndex]; }
+      const Entry& operator*() const { return fFile[fIndex]; }
       Entry* operator->() { return &operator*(); }
+      const Entry* operator->() const { return &operator*(); }
       bool operator==(const Iterator& it) const { IsSameFile(it); return fIndex == it.fIndex; }
       bool operator!=(const Iterator& it) const { IsSameFile(it); return !operator==(it); }
     private:
@@ -65,22 +71,24 @@ namespace io {
 
     RootInFile(const std::string& filename,
                const std::string& treeName = "",
-               const std::string& branchName = "")
-    { Open(std::vector<std::string>(1, filename), treeName, branchName); }
+               const std::string& branchName = "",
+               const bool checkValidity = false,
+               const bool skipRecovered = false,
+               const bool verbose = false)
+    { Open({filename}, treeName, branchName, checkValidity, skipRecovered, verbose); }
 
     RootInFile(const std::vector<std::string>& filenames,
                const std::string& treeName = "",
-               const std::string& branchName = "")
-    { Open(filenames, treeName, branchName); }
+               const std::string& branchName = "",
+               const bool checkValidity = false,
+               const bool skipRecovered = false,
+               const bool verbose = false)
+    { Open(filenames, treeName, branchName, checkValidity, skipRecovered, verbose); }
 
     ~RootInFile() { Close(); }
 
-    ULong64_t
-    GetSize()
-    {
-      IO_ROOTFILE_CHECK;
-      return fChain->GetEntries();
-    }
+    ULong64_t GetSize()
+    { IO_ROOTFILE_CHECK; return fChain->GetEntries(); }
 
     Entry&
     operator[](const ULong64_t i)
@@ -95,21 +103,13 @@ namespace io {
       return *fEntryBuffer;
     }
 
-    Iterator
-    Begin()
-    {
-      IO_ROOTFILE_CHECK;
-      return Iterator(*this, 0);
-    }
+    Iterator Begin()
+    { IO_ROOTFILE_CHECK; return Iterator(*this, 0); }
 
     Iterator begin() { return Begin(); }
 
-    Iterator
-    End()
-    {
-      IO_ROOTFILE_CHECK;
-      return Iterator(*this, GetSize());
-    }
+    Iterator End()
+    { IO_ROOTFILE_CHECK; return Iterator(*this, GetSize()); }
 
     Iterator end() { return End(); }
 
@@ -141,37 +141,86 @@ namespace io {
     void SetBranchStatus(const std::string& branch, const bool status)
     { Check(); fChain->SetBranchStatus(branch.c_str(), status); }
 
+    TChain& GetChain() { Check(); return *fChain; }
+
+    static
+    bool
+    IsValid(const std::string& name,
+            const std::string& treeName = std::string(Entry::Class_Name()) + "Tree",
+            const bool rejectRecovered = false,
+            const bool verbose = false)
+    {
+      bool isOk = true;
+      auto* const file = TFile::Open(name.c_str());
+      if (!file) {
+        if (verbose)
+          std::cerr << "RootInFile::IsValid: File '" << name << "' cannot be opened!\n";
+        isOk = false;
+      } else if (file->IsZombie()) {
+        if (verbose)
+          std::cerr << "RootInFile::IsValid: File '" << name << "' is a zombie!\n";
+        isOk = false;
+      } else if (rejectRecovered && file->TestBit(TFile::kRecovered)) {
+        if (verbose)
+          std::cerr << "RootInFile::IsValid: Reject recovered file '" << name << "'!\n";
+        isOk = false;
+      } else if (!file->GetListOfKeys()->Contains(treeName.c_str())) {
+        if (verbose)
+          std::cerr << "RootInFile::IsValid: File '" << name << "' has no TTree '" << treeName << "'!\n";
+        isOk = false;
+      } else {
+        TTree* const tree = (TTree*)file->GetObjectChecked(treeName.c_str(), "TTree");
+        if (!tree) {
+          if (verbose)
+            std::cerr << "RootInFile::IsValid: File '" << name << "' has no TTree '" << treeName << "'!\n";
+          isOk = false;
+        } else if (!tree->GetEntries()) {
+          if (verbose)
+            std::cerr << "RootInFile::IsValid: TTree in file '" << name << "' has no entries!\n";
+          isOk = false;
+        }
+      }
+      delete file;
+      return isOk;
+    }
+
   private:
     // prevent copying
     RootInFile(const RootInFile&);
     RootInFile& operator=(const RootInFile&);
 
-    void
-    Error(const char* const message)
-    {
-      Close();
-      throw std::runtime_error(message);
-    }
+    void Error(const char* const message)
+    { Close(); throw std::runtime_error(message); }
 
     void
     Open(const std::vector<std::string>& filenames,
          std::string treeName,
-         std::string branchName)
+         std::string branchName,
+         const bool checkValidity, const bool skipRecovered, const bool verbose)
     {
       const SaveCurrentTDirectory save;
       if (treeName.empty())
         treeName = std::string(Entry::Class_Name()) + "Tree";
       fChain = new TChain(treeName.c_str());
       size_t nFiles = 0;
-      for (const auto& name : filenames)
+      for (const auto& name : filenames) {
+        if (checkValidity && !IsValid(name, treeName, skipRecovered, verbose)) {
+          if (verbose)
+            std::cerr << "RooInFile::Open: File '" << name << "' not valid!\n";
+          continue;
+        }
         nFiles += fChain->Add(name.c_str());
-      if (!nFiles)
-        Error("RootInFile::Open: no files found");
-      fEntryBuffer = new Entry;
-      if (branchName.empty())
-        branchName = Entry::Class_Name();
-      fChain->SetBranchAddress(branchName.c_str(), &fEntryBuffer);
-      Check();
+      }
+      if (!nFiles) {
+        if (verbose)
+          std::cerr << "RootInFile::Open: no valid files!\n";
+      } else {
+        fEntryBuffer = new Entry;
+        if (branchName.empty())
+          branchName = Entry::Class_Name();
+        fChain->SetBranchAddress(branchName.c_str(), &fEntryBuffer);
+        Check();
+      }
     }
 
     template<class T>

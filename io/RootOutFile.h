@@ -1,4 +1,4 @@
-// $Id: RootOutFile.h 1570 2018-12-05 12:30:48Z darko $
+// $Id: RootOutFile.h 2079 2024-11-28 18:38:23Z darko $
 #ifndef _io_RootOutFile_h_
 #define _io_RootOutFile_h_
 
@@ -25,10 +25,8 @@ namespace io {
   template<class Entry>
   class RootOutFile {
   public:
-    RootOutFile(const std::string& filename, const int compression = 1)
-    {
-      Open(filename, compression);
-    }
+    RootOutFile(const std::string& filename, const int compression = 1, const int buffSize = 900000)
+    { Open(filename, compression, buffSize); }
 
     ~RootOutFile() { Close(); }
 
@@ -58,16 +56,16 @@ namespace io {
     Close()
     {
       if (fFile && fFile->IsWritable() && fTree) {
-        const SaveCurrentTDirectory save;
-        fFile->cd();
+        //const SaveCurrentTDirectory save;
+        //fFile->cd();
         fTree->Write();
         fFile->Close();
         delete fFile;
-        fFile = 0;
+        fFile = nullptr;
         //delete fTree;  // broken ROOT memory management
-        fTree = 0;
+        fTree = nullptr;
       }
-      fEntryPtr = 0;
+      fEntryPtr = nullptr;
     }
 
     void SetMaxTreeSize(const Long64_t size) { fTree->SetMaxTreeSize(size); }
@@ -81,22 +79,18 @@ namespace io {
     RootOutFile(const RootOutFile&);
     RootOutFile& operator=(const RootOutFile&);
 
-    void
-    Error(const char* const message)
-    {
-      Close();
-      throw std::runtime_error(message);
-    }
+    void Error(const char* const message)
+    { Close(); throw std::runtime_error(message); }
 
     void
-    Open(const std::string& filename, const int compression)
+    Open(const std::string& filename, const int compression, const int buffSize)
     {
       const SaveCurrentTDirectory save;
       fFile = new TFile(filename.c_str(), "recreate", "", compression);
       const std::string treeName = std::string(Entry::Class_Name()) + "Tree";
       fTree = new TTree(treeName.c_str(), treeName.c_str());
-      fEntryPtr = 0;
-      fTree->Branch(Entry::Class_Name(), Entry::Class_Name(), &fEntryPtr, 900000);
+      fEntryPtr = nullptr;
+      fTree->Branch(Entry::Class_Name(), Entry::Class_Name(), &fEntryPtr, buffSize);
       Check();
     }
 
