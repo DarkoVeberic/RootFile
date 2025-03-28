@@ -7,7 +7,6 @@
   Copyright (c) Darko Veberic, 2014
 */
 
-#include <io/SaveCurrentTDirectory.h>
 #include <TFile.h>
 #include <TTree.h>
 #include <string>
@@ -56,13 +55,10 @@ namespace io {
     Close()
     {
       if (fFile && fFile->IsWritable() && fTree) {
-        //const SaveCurrentTDirectory save;
-        //fFile->cd();
-        fTree->Write();
-        fFile->Close();
+        fFile->Write();
         delete fFile;
         fFile = nullptr;
-        //delete fTree;  // broken ROOT memory management
+        //delete fTree;  // weird ROOT memory management: fTree owned by the fFile
         fTree = nullptr;
       }
       fEntryPtr = nullptr;
@@ -85,7 +81,6 @@ namespace io {
     void
     Open(const std::string& filename, const int compression, const int buffSize)
     {
-      const SaveCurrentTDirectory save;
       fFile = new TFile(filename.c_str(), "recreate", "", compression);
       const std::string treeName = std::string(Entry::Class_Name()) + "Tree";
       fTree = new TTree(treeName.c_str(), treeName.c_str());

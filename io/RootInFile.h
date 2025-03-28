@@ -7,7 +7,6 @@
   Copyright (c) Darko Veberic, 2014
 */
 
-#include <io/SaveCurrentTDirectory.h>
 #include <TChain.h>
 #include <TChainElement.h>
 #include <TFile.h>
@@ -198,7 +197,6 @@ namespace io {
          std::string branchName,
          const bool checkValidity, const bool skipRecovered, const bool verbose)
     {
-      const SaveCurrentTDirectory save;
       if (treeName.empty())
         treeName = std::string(Entry::Class_Name()) + "Tree";
       fChain = new TChain(treeName.c_str());
