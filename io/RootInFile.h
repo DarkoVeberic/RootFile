@@ -28,22 +28,13 @@ namespace io {
   template<class Entry>
   class RootInFile {
   public:
-    class Iterator :
-      public
-      std::iterator<
-        std::input_iterator_tag,
-        Entry,
-        std::ptrdiff_t,
-        Entry*,
-        Entry&
-      > {
+    class Iterator {
     public:
-      typedef Iterator self_type;
-      typedef Entry value_type;
-      typedef Entry& reference;
-      typedef Entry* pointer;
-      typedef int difference_type;
-      typedef std::input_iterator_tag iterator_category;
+      using iterator_category = std::input_iterator_tag;
+      using value_type = Entry;
+      using difference_type = std::ptrdiff_t;
+      using pointer = Entry*;
+      using reference = Entry&;
 
       //Iterator(const Iterator& b) : fFile(b.fFile), fIndex(b.fIndex) { }
       Iterator(RootInFile& file, const ULong64_t index) : fFile(file), fIndex(index) { }
@@ -188,7 +179,7 @@ namespace io {
     RootInFile(const RootInFile&);
     RootInFile& operator=(const RootInFile&);
 
-    void Error(const char* const message)
+    [[noreturn]] void Error(const char* const message)
     { Close(); throw std::runtime_error(message); }
 
     void
@@ -212,6 +203,8 @@ namespace io {
       if (!nFiles) {
         if (verbose)
           std::cerr << "RootInFile::Open: no valid files!\n";
+        delete fChain;
+        fChain = nullptr;
       } else {
         fEntryBuffer = new Entry;
         if (branchName.empty())

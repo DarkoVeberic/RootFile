@@ -75,7 +75,7 @@ namespace io {
     RootOutFile(const RootOutFile&);
     RootOutFile& operator=(const RootOutFile&);
 
-    void Error(const char* const message)
+    [[noreturn]] void Error(const char* const message)
     { Close(); throw std::runtime_error(message); }
 
     void
